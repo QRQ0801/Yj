@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>스터디 렌즈</title>
+<style>
+  :root {
+    --paper: #eef2f6;
+    --ink: #13233a;
+    --muted: #5b6b80;
+    --line: #cdd6e2;
+    --cobalt: #2a5bd7;
+    --amber: #f2b01e;
+    --card: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0f1826;
+      --ink: #e6edf7;
+      --muted: #93a3b8;
+      --line: #25354d;
+      --cobalt: #6f98ff;
+      --card: #172338;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+    line-height: 1.6;
+    padding: max(14px, env(safe-area-inset-top)) 14px max(20px, env(safe-area-inset-bottom));
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 20px; margin: 4px 0 12px; letter-spacing: -0.02em; }
+  .stage {
+    position: relative;
+    background: #000;
+    border-radius: 14px;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+    border: 2px solid var(--line);
+  }
+  .stage.busy { border-color: var(--amber); }
+  video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .status {
+    position: absolute; left: 10px; bottom: 10px;
+    background: rgba(19,35,58,.82); color: #fff;
+    padding: 4px 10px; border-radius: 999px; font-size: 13px;
+  }
+  .placeholder {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    color: #9fb0c6; font-size: 14px; text-align: center; padding: 20px;
+  }
+  .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  button {
+    font: inherit; font-weight: 600; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink); padding: 10px 14px; min-height: 44px; cursor: pointer;
+  }
+  button.primary { background: var(--cobalt); border-color: var(--cobalt); color: #fff; flex: 1; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+  details { margin-top: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+  summary { cursor: pointer; font-weight: 600; }
+  label { display: block; margin-top: 10px; font-size: 14px; color: var(--muted); }
+  input, select {
+    width: 100%; font: inherit; color: var(--ink); background: var(--paper);
+    border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; margin-top: 4px; min-height: 42px;
+  }
+  .check { display: flex; align-items: center; gap: 8px; color: var(--ink); }
+  .check input { width: 20px; min-height: 20px; margin: 0; }
+  .answer {
+    margin-top: 14px; background: var(--card); border: 1px solid var(--line);
+    border-left: 5px solid var(--cobalt); border-radius: 12px; padding: 14px 16px;
+  }
+  .answer .meta { color: var(--muted); font-size: 13px; }
+  .answer .final { font-size: 22px; font-weight: 700; margin: 4px 0 10px; letter-spacing: -0.01em; }
+  .answer .explain { white-space: pre-wrap; max-width: 62ch; }
+  .error { border-left-color: #d64545; }
+  .history { margin-top: 18px; }
+  .history h2 { font-size: 15px; color: var(--muted); margin: 0 0 6px; }
+  .history button { display: block; width: 100%; text-align: left; margin-bottom: 6px; font-weight: 500; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+
+<h1>스터디 렌즈</h1>
+
+<div class="stage" id="stage">
+  <video id="video" playsinline muted></video>
+  <div class="placeholder" id="placeholder">‘카메라 시작’을 누르고 문제를 비춰 주세요</div>
+  <div class="status" id="status">대기 중</div>
+</div>
+
+<div class="row">
+  <button class="primary" id="startBtn">카메라 시작</button>
+  <button id="snapBtn" disabled>지금 풀기</button>
+  <button id="stopSpeakBtn">음성 멈춤</button>
+</div>
+
+<details id="settings" open>
+  <summary>설정</summary>
+  <label>Gemini API 키 (이 기기 브라우저에만 저장돼요)
+    <input id="apiKey" type="password" autocomplete="off" placeholder="AI Studio에서 발급한 키">
+  </label>
+  <label>모델
+    <input id="model" type="text" value="gemini-2.5-flash">
+  </label>
+  <label>캡처 간격
+    <select id="interval">
+      <option value="2000">2초</option>
+      <option value="3000" selected>3초</option>
+      <option value="5000">5초</option>
+      <option value="8000">8초</option>
+    </select>
+  </label>
+  <label>과목 힌트 (비워 두면 자동 판별)
+    <select id="subject">
+      <option value="">자동</option>
+      <option>수학</option>
+      <option>영어</option>
+      <option>국어</option>
+      <option>과학</option>
+      <option>사회</option>
+      <option>기타</option>
+    </select>
+  </label>
+  <label class="check"><input type="checkbox" id="autoMode" checked> 자동 캡처 (문제가 바뀌면 알아서 풀기)</label>
+  <label class="check"><input type="checkbox" id="speakOn" checked> 풀이를 음성으로 읽기</label>
+</details>
+
+<div id="result"></div>
+
+<div class="history" id="historyBox" hidden>
+  <h2>이전에 푼 문제</h2>
+  <div id="history"></div>
+</div>
+
+<canvas id="work" hidden></canvas>
+<canvas id="tiny" width="32" height="32" hidden></canvas>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var video = $('video'), work = $('work'), tiny = $('tiny');
+  var tctx = tiny.getContext('2d', { willReadFrequently: true });
+  var stream = null, timer = null, busy = false;
+  var lastSig = null;      // signature of the previous tick
+  var sentSig = null;      // signature of the last frame sent to the AI
+  var history = [];
+
+  // ---- saved settings (wrapped: storage can be unavailable)
+  function load(k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } }
+  function save(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  $('apiKey').value = load('sl_key', '');
+  $('model').value = load('sl_model', 'gemini-2.5-flash');
+  $('apiKey').addEventListener('change', function () { save('sl_key', this.value.trim()); });
+  $('model').addEventListener('change', function () { save('sl_model', this.value.trim()); });
+  $('interval').addEventListener('change', restartTimer);
+  $('autoMode').addEventListener('change', restartTimer);
+  if (load('sl_key', '')) $('settings').open = false;
+
+  function setStatus(t, isBusy) {
+    $('status').textContent = t;
+    $('stage').classList.toggle('busy', !!isBusy);
+  }
+
+  // ---- camera
+  $('startBtn').addEventListener('click', async function () {
+    if (stream) { stopCamera(); return; }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+      $('placeholder').hidden = true;
+      $('startBtn').textContent = '카메라 끄기';
+      $('snapBtn').disabled = false;
+      setStatus('문제를 비춰 주세요');
+      restartTimer();
+    } catch (e) {
+      showError('카메라를 열지 못했어요. 브라우저의 카메라 권한을 허용했는지, 주소가 https인지 확인해 주세요.');
+    }
+  });
+
+  function stopCamera() {
+    if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+    stream = null; video.srcObject = null;
+    clearInterval(timer); timer = null;
+    $('placeholder').hidden = false;
+    $('startBtn').textContent = '카메라 시작';
+    $('snapBtn').disabled = true;
+    setStatus('대기 중');
+  }
+
+  function restartTimer() {
+    clearInterval(timer); timer = null;
+    if (stream && $('autoMode').checked) {
+      timer = setInterval(tick, parseInt($('interval').value, 10));
+    }
+  }
+
+  // ---- frame handling
+  function signature() {
+    tctx.drawImage(video, 0, 0, 32, 32);
+    var d = tctx.getImageData(0, 0, 32, 32).data, out = new Array(1024);
+    for (var i = 0; i < 1024; i++) {
+      out[i] = (d[i * 4] * 0.3 + d[i * 4 + 1] * 0.59 + d[i * 4 + 2] * 0.11);
+    }
+    return out;
+  }
+  function diff(a, b) {
+    if (!a || !b) return 999;
+    var s = 0;
+    for (var i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]);
+    return s / a.length;
+  }
+
+  function tick() {
+    if (!stream || busy || !video.videoWidth) return;
+    var sig = signature();
+    var moving = diff(sig, lastSig) > 6;      // camera still being moved
+    var sameAsSent = diff(sig, sentSig) < 12;  // same problem as last time
+    lastSig = sig;
+    if (moving) { setStatus('초점 맞추는 중…'); return; }
+    if (sameAsSent) { setStatus('같은 문제예요'); return; }
+    solve(sig);
+  }
+
+  $('snapBtn').addEventListener('click', function () { if (stream && !busy) solve(signature()); });
+
+  function grabJpegBase64() {
+    var maxW = 1280, w = video.videoWidth, h = video.videoHeight;
+    var scale = Math.min(1, maxW / w);
+    work.width = Math.round(w * scale); work.height = Math.round(h * scale);
+    work.getContext('2d').drawImage(video, 0, 0, work.width, work.height);
+    return work.toDataURL('image/jpeg', 0.82).split(',')[1];
+  }
+
+  // ---- Gemini
+  async function solve(sig) {
+    var key = $('apiKey').value.trim();
+    if (!key) { $('settings').open = true; showError('설정에서 Gemini API 키를 먼저 입력해 주세요.'); return; }
+    busy = true; sentSig = sig;
+    setStatus('푸는 중…', true);
+    var hint = $('subject').value;
+    var prompt =
+      '너는 학생의 공부를 돕는 튜터야. 사진 속 문제를 찾아 풀어 줘.' +
+      (hint ? ' 과목은 ' + hint + '(이)야.' : ' 과목은 사진을 보고 판단해.') +
+      ' 문제가 여러 개면 가장 눈에 띄는(중앙의) 문제 하나만 풀어. 수식은 읽기 쉬운 일반 텍스트로 써.' +
+      ' 풀이는 단계별로 이유를 설명하고, 한국어로 답해.' +
+      ' 사진에 풀 문제가 없거나 글씨를 읽을 수 없으면 found를 false로 하고 이유를 explanation에 적어.' +
+      ' JSON으로만 답해: {"found":boolean,"subject":string,"question":string,"answer":string,"explanation":string,"spoken":string}.' +
+      ' question은 문제 한 줄 요약, answer는 최종 답, spoken은 소리 내어 읽기 좋게 답과 핵심 이유를 2~3문장으로 쓴 것.';
+    var body = {
+      contents: [{ parts: [
+        { text: prompt },
+        { inline_data: { mime_type: 'image/jpeg', data: grabJpegBase64() } }
+      ] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.2 }
+    };
+    var url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+      encodeURIComponent($('model').value.trim() || 'gemini-2.5-flash') + ':generateContent?key=' + encodeURIComponent(key);
+    try {
+      var res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      var data = await res.json();
+      if (!res.ok) throw new Error((data.error && data.error.message) || ('HTTP ' + res.status));
+      var parts = data.candidates && data.candidates[0] && data.candidates[0].content.parts;
+      var text = (parts || []).map(function (p) { return p.text || ''; }).join('').replace(/```json|```/g, '').trim();
+      var out = JSON.parse(text);
+      if (!out.found) { sentSig = null; showNote(out.explanation || '풀 문제를 찾지 못했어요.'); setStatus('문제를 찾는 중'); }
+      else { showAnswer(out); setStatus('완료'); }
+    } catch (e) {
+      sentSig = null;
+      showError('풀이에 실패했어요: ' + e.message);
+      setStatus('오류');
+    } finally {
+      busy = false;
+      $('stage').classList.remove('busy');
+    }
+  }
+
+  // ---- output
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function render(box) { var r = $('result'); r.textContent = ''; r.appendChild(box); }
+
+  function showAnswer(o) {
+    var box = el('div', 'answer');
+    box.appendChild(el('div', 'meta', (o.subject || '문제') + ' · ' + (o.question || '')));
+    box.appendChild(el('div', 'final', '답: ' + (o.answer || '')));
+    box.appendChild(el('div', 'explain', o.explanation || ''));
+    render(box);
+    history.unshift(o);
+    history = history.slice(0, 8);
+    renderHistory();
+    if ($('speakOn').checked) speak(o.spoken || ('답은 ' + o.answer + ' 입니다.'));
+  }
+  function showNote(t) { var b = el('div', 'answer'); b.appendChild(el('div', 'explain', t)); render(b); }
+  function showError(t) { var b = el('div', 'answer error'); b.appendChild(el('div', 'explain', t)); render(b); }
+
+  function renderHistory() {
+    var h = $('history'); h.textContent = '';
+    history.forEach(function (o) {
+      var b = el('button', '', (o.subject || '') + ' · ' + (o.question || '').slice(0, 40));
+      b.addEventListener('click', function () { showAnswer(Object.assign({}, o)); });
+      h.appendChild(b);
+    });
+    $('historyBox').hidden = history.length === 0;
+  }
+
+  function speak(t) {
+    if (!('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(t);
+    u.lang = 'ko-KR'; u.rate = 1.0;
+    speechSynthesis.speak(u);
+  }
+  $('stopSpeakBtn').addEventListener('click', function () { if ('speechSynthesis' in window) speechSynthesis.cancel(); });
+})();
+</script>
+</body>
+</html>
